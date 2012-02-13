@@ -83,6 +83,14 @@ class VoiceCmd:
         stream.close()
         p.terminate()
         data = ''.join(read)
+
+        debug = wave.open('debug.wav', 'wb')
+        debug.setnchannels(channels)
+        debug.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+        debug.setframerate(rate)
+        debug.writeframes(data)
+        debug.close()
+
         out = unpack_wav(data, chunks_needed * fpb, channels)
         return out
 
