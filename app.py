@@ -9,7 +9,7 @@ import pyaudio
 
 from mlpy import dtw_subsequence as dtw
 from numpy import array
-from scipy.signal import resample
+from numpy.fft import fft
 
 
 config = {'commands_folder': 'commands'}
@@ -18,41 +18,36 @@ def unpack_wav(data, nframes, nchannels):
     unpacked = struct.unpack_from("{0}h".format(nframes * nchannels), data)
     first_channel = [unpacked[i] for i in range(0, len(unpacked), nchannels)]
     out = array(list(first_channel))
-    return out
+    dft = fft(out, 1024)
+    return dft
 
-def shorten_array(arr):
-    return resample(arr, 10000) / arr.max()
+def normalize(arr):
+    return arr / arr.max()
+
+def load_wav(filepath):
+    voice = wave.open(filepath, 'rb')
+    (nchannels, sampwidth, framerate, nframes, comptype, compname) = voice.getparams()
+    frames = voice.readframes(nframes * nchannels)
+    out = unpack_wav(frames, nframes, nchannels)
+    voice.close()
+    return normalize(out)
 
 class Command:
 
     def __init__(self, name, path):
         self.name = name
-        self.voice_path = os.path.join(path, 'command.wav')
-        self.noise_path = os.path.join(path, 'command_noise.wav')
+        self.voice = load_wav(os.path.join(path, 'command.wav'))
+        self.noise = load_wav(os.path.join(path, 'command_noise.wav'))
         self.shell_path = os.path.join(path, 'command.sh')
 
     def execute(self):
         with open(os.devnull) as mute:
             subprocess.call(self.shell_path, stderr=mute)
 
-    def get_voice_array(self):
-        return self.read_wav_file(self.voice_path)
-
-    def get_noise_array(self):
-        return self.read_wav_file(self.noise_path)
-
     def distances(self, query):
-        voice_d = dtw(self.get_voice_array(), query)[0]
-        noise_d = dtw(self.get_noise_array(), query)[0]
+        voice_d = dtw(self.voice, query)[0]
+        noise_d = dtw(self.noise, query)[0]
         return voice_d, noise_d
-
-    def read_wav_file(self, path):
-        voice = wave.open(path, 'rb')
-        (nchannels, sampwidth, framerate, nframes, comptype, compname) = voice.getparams()
-        frames = voice.readframes(nframes * nchannels)
-        out = unpack_wav(frames, nframes, nchannels)
-        voice.close()
-        return shorten_array(out)
 
 class VoiceCmd:
 
@@ -67,11 +62,11 @@ class VoiceCmd:
 
     def run(self):
         print "Speak now."
-        signal = shorten_array(self.read_voice())
+        signal = normalize(self.read_voice())
         print "Recording stopped"
         for command in self.commands.itervalues():
             dist = command.distances(signal)
-            print command.name, dist
+            print command.name, dist, self.distance(command.voice, command.noise)
 
     def distance(self, template, query):
         return dtw(template, query)[0]
