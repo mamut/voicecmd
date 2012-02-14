@@ -88,7 +88,10 @@ class VoiceCmd:
         signal = self.read_voice()
         #signal = load_wav('commands/calculator/command1.wav')
         print "Recording stopped"
-        print self.predict(signal)
+        decision = self.predict(signal)
+        print decision
+        self.commands[decision].execute()
+
 
     def predict(self, signal):
         return self.command_names[int(self.svm.pred(signal))]
