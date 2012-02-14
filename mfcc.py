@@ -8,7 +8,7 @@ import numpy
 from numpy.fft import fft as fft
 from scipy.fftpack import dct
 
-numCoefficients = 15
+numCoefficients = 13
 minHz = 0
 maxHz = 22.000
 blockSize = 2048

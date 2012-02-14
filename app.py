@@ -8,7 +8,8 @@ import wave
 import pyaudio
 
 from mlpy import dtw_subsequence as dtw
-from numpy import array, absolute, log
+from mlpy import LibSvm
+from numpy import array, absolute
 from numpy.fft import rfft as fft
 
 from mfcc import find_mfcc
@@ -42,11 +43,16 @@ def load_wav(filepath):
 
 class Command:
 
-    def __init__(self, name, path):
+    def __init__(self, name, index, path):
+        self.objects = []
         self.name = name
-        self.voice = load_wav(os.path.join(path, 'command.wav'))
-        self.noise = load_wav(os.path.join(path, 'command_noise.wav'))
+        self.index = index
         self.shell_path = os.path.join(path, 'command.sh')
+        for filepath in os.listdir(path):
+            if filepath.endswith('.wav'):
+                fullpath = os.path.join(path, filepath)
+                features = load_wav(fullpath)
+                self.objects.append(features)
 
     def execute(self):
         with open(os.devnull) as mute:
@@ -62,20 +68,30 @@ class VoiceCmd:
     def __init__(self, config):
         self.config = config
         self.commands = {}
+        self.command_names = {}
         commands_folder = self.config['commands_folder']
-        for command_name in os.listdir(commands_folder):
-            cmd = Command(command_name, os.path.join(commands_folder, command_name))
+        for index, command_name in enumerate(os.listdir(commands_folder)):
+            cmd = Command(command_name, index, os.path.join(commands_folder, command_name))
             self.commands[command_name] = cmd
+            self.command_names[index] = command_name
 
+        self.svm = LibSvm(svm_type='c_svc', kernel_type='linear')
+        x, y = [], []
+        for command in self.commands.itervalues():
+            for feature in command.objects:
+                x.append(feature)
+                y.append(command.index)
+        self.svm.learn(x, y)
 
     def run(self):
         print "Speak now."
-        #signal = self.read_voice()
-        signal = load_wav('test.wav')
+        signal = self.read_voice()
+        #signal = load_wav('commands/calculator/command1.wav')
         print "Recording stopped"
-        for command in self.commands.itervalues():
-            dist = command.distances(signal)
-            print command.name, dist, self.distance(command.voice, command.noise)
+        print self.predict(signal)
+
+    def predict(self, signal):
+        return self.command_names[int(self.svm.pred(signal))]
 
     def distance(self, template, query):
         return dtw(template, query)[0]
