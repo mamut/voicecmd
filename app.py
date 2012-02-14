@@ -8,8 +8,10 @@ import wave
 import pyaudio
 
 from mlpy import dtw_subsequence as dtw
-from numpy import array
-from numpy.fft import fft
+from numpy import array, absolute, log
+from numpy.fft import rfft as fft
+
+from mfcc import find_mfcc
 
 
 config = {'commands_folder': 'commands'}
@@ -18,8 +20,14 @@ def unpack_wav(data, nframes, nchannels):
     unpacked = struct.unpack_from("{0}h".format(nframes * nchannels), data)
     first_channel = [unpacked[i] for i in range(0, len(unpacked), nchannels)]
     out = array(list(first_channel))
-    dft = fft(out, 1024)
-    return dft
+    #rescaled = power_spectrum(out)
+    rescaled = find_mfcc(out)
+    return rescaled
+
+def power_spectrum(signal):
+    dft = fft(normalize(signal), 2048)
+    power = absolute(dft) ** 2
+    return power
 
 def normalize(arr):
     return arr / arr.max()
@@ -30,7 +38,7 @@ def load_wav(filepath):
     frames = voice.readframes(nframes * nchannels)
     out = unpack_wav(frames, nframes, nchannels)
     voice.close()
-    return normalize(out)
+    return out
 
 class Command:
 
@@ -62,7 +70,8 @@ class VoiceCmd:
 
     def run(self):
         print "Speak now."
-        signal = normalize(self.read_voice())
+        #signal = self.read_voice()
+        signal = load_wav('test.wav')
         print "Recording stopped"
         for command in self.commands.itervalues():
             dist = command.distances(signal)
@@ -72,7 +81,7 @@ class VoiceCmd:
         return dtw(template, query)[0]
 
     def read_voice(self):
-        rate, fpb, seconds, channels = 44100, 1024, 5, 1
+        rate, fpb, seconds, channels = 44100, 1024, 3, 1
         read = []
         p = pyaudio.PyAudio()
         stream = p.open(format=pyaudio.paInt16, channels=channels, rate=rate, input=True, frames_per_buffer=fpb)
